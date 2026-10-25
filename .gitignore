@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+.venv/
+venv/
+
+# Editors
+.vscode/
+
+# Trained models & Datasets
+*.npz
+*.model
