@@ -66,7 +66,16 @@ def main(args: argparse.Namespace) -> tuple[tuple[np.ndarray, ...], list[float]]
         # in softmax can easily overflow. To avoid it, you should use the fact that
         # $softmax(z) = softmax(z + any_constant)$ and compute $softmax(z) = softmax(z - maximum_of_z)$.
         # That way we only exponentiate values which are non-positive, and overflow does not occur.
-        raise NotImplementedError()
+
+        def ReLU(x):
+            return np.maximum(x, 0)
+        def softmax(z):
+            z = z - np.max(z, axis=-1, keepdims=True)
+            return np.exp(z) / np.sum(np.exp(z), axis=-1, keepdims=True)
+
+        hidden_layer = ReLU(inputs @ weights[0] + biases[0])
+        output_layer = softmax(hidden_layer @ weights[1] + biases[1])
+        return hidden_layer, output_layer
 
     for epoch in range(args.epochs):
         permutation = generator.permutation(train_data.shape[0])
@@ -87,10 +96,32 @@ def main(args: argparse.Namespace) -> tuple[tuple[np.ndarray, ...], list[float]]
         # - compute the derivative with respect to the hidden layer output,
         # - compute the derivative with respect to the hidden layer input,
         # - compute the derivative with respect to `weights[0]` and `biases[0]`.
+        for i in range(0, train_data.shape[0], args.batch_size):
+            batch = permutation[i : i + args.batch_size]
+            inputs, targets = train_data[batch], train_target[batch]
+
+            hidden_layer, output_layer = forward(inputs)
+            one_hot_targets = np.eye(args.classes)[targets]
+
+            der_weights1 = hidden_layer.T @ (output_layer - one_hot_targets) / len(batch)
+            der_biases1 = np.mean(output_layer - one_hot_targets, axis=0)
+
+            der_weights0 = inputs.T @ (((output_layer - one_hot_targets) @ weights[1].T) * (hidden_layer > 0)) / len(batch)
+            der_biases0 = np.mean(((output_layer - one_hot_targets) @ weights[1].T) * (hidden_layer > 0), axis=0)
+
+            weights[0] -= args.learning_rate * der_weights0
+            weights[1] -= args.learning_rate * der_weights1
+            biases[0] -= args.learning_rate * der_biases0
+            biases[1] -= args.learning_rate * der_biases1
 
         # TODO: After the SGD epoch, measure the accuracy for both the
         # train test and the test set.
-        train_accuracy, test_accuracy = ...
+
+        train_predictions = np.argmax(forward(train_data)[1], axis=1)
+        test_predictions = np.argmax(forward(test_data)[1], axis=1)
+        train_accuracy, test_accuracy = (
+            sklearn.metrics.accuracy_score(train_target, train_predictions),
+            sklearn.metrics.accuracy_score(test_target, test_predictions))
 
         print("After epoch {}: train acc {:.1f}%, test acc {:.1f}%".format(
             epoch + 1, 100 * train_accuracy, 100 * test_accuracy))
@@ -103,3 +134,5 @@ if __name__ == "__main__":
     parameters, metrics = main(main_args)
     print("Learned parameters:",
           *(" ".join([" "] + ["{:.2f}".format(w) for w in ws.ravel()[:12]] + ["..."]) for ws in parameters), sep="\n")
+# e45adcd4-55ef-41de-ac3f-e2cd9863b321
+# b5121daf-294b-4cbe-9d6c-23ba00ffecf8
