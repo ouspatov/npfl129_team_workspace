@@ -24,8 +24,8 @@ parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--batch_size", default=10, type=int, help="Batch size")
 parser.add_argument("--classes", default=10, type=int, help="Number of classes to use")
-parser.add_argument("--epochs", default=10, type=int, help="Number of SGD training epochs")
-parser.add_argument("--learning_rate", default=0.01, type=float, help="Learning rate")
+parser.add_argument("--epochs", default=2, type=int, help="Number of SGD training epochs")
+parser.add_argument("--learning_rate", default=0.005, type=float, help="Learning rate")
 parser.add_argument("--recodex", default=False, action="store_true", help="Running in ReCodEx")
 parser.add_argument("--seed", default=244, type=int, help="Random seed")
 parser.add_argument("--test_size", default=797, type=lambda x: int(x) if x.isdigit() else float(x), help="Test size")
@@ -54,20 +54,51 @@ def main(args: argparse.Namespace) -> tuple[np.ndarray, list[tuple[float, float]
 
     for epoch in range(args.epochs):
         permutation = generator.permutation(train_data.shape[0])
-
         # TODO: Process the data in the order of `permutation`. For every
         # `args.batch_size` of them, average their gradient, and update the weights.
         # You can assume that `args.batch_size` exactly divides `train_data.shape[0]`.
-        #
-        # Note that you need to be careful when computing softmax because the exponentiation
-        # in softmax can easily overflow. To avoid it, you should use the fact that
-        # $softmax(z) = softmax(z + any_constant)$ and compute $softmax(z) = softmax(z - maximum_of_z)$.
-        # That way we only exponentiate non-positive values, and overflow does not occur.
+        for i in range(0, len(permutation), args.batch_size):
+            batch_indices = permutation[i:i + args.batch_size]
+            batch_x = train_data[batch_indices]
+            batch_y = train_target[batch_indices]
+
+            # Compute activations
+            z = batch_x @ weights
+            
+            # Numerically stable softmax
+            z_stable = z - np.max(z, axis=1, keepdims=True)
+            exp_z = np.exp(z_stable)
+            softmax_probs = exp_z / np.sum(exp_z, axis=1, keepdims=True)
+
+            # One-hot encoding of target classes manually
+            target_one_hot = np.zeros_like(softmax_probs)
+            target_one_hot[np.arange(args.batch_size), batch_y] = 1
+
+            # Gradient of cross-entropy: (1 / N) * X^T * (P - Y)
+            gradient = (batch_x.T @ (softmax_probs - target_one_hot)) / args.batch_size
+
+            # SGD Weight Update
+            weights -= args.learning_rate * gradient
 
         # TODO: After the SGD epoch, measure the average loss and accuracy for both the
         # train test and the test set. The loss is the average MLE loss (i.e., the
         # negative log-likelihood, or cross-entropy loss, or KL loss) per example.
-        train_accuracy, train_loss, test_accuracy, test_loss = ...
+        
+        # Evaluate Train
+        train_z = train_data @ weights
+        train_z_stable = train_z - np.max(train_z, axis=1, keepdims=True)
+        train_exp_z = np.exp(train_z_stable)
+        train_probs = train_exp_z / np.sum(train_exp_z, axis=1, keepdims=True)
+        train_loss = -np.mean(np.log(train_probs[np.arange(len(train_target)), train_target]))
+        train_accuracy = np.mean(np.argmax(train_probs, axis=1) == train_target)
+
+        # Evaluate Test
+        test_z = test_data @ weights
+        test_z_stable = test_z - np.max(test_z, axis=1, keepdims=True)
+        test_exp_z = np.exp(test_z_stable)
+        test_probs = test_exp_z / np.sum(test_exp_z, axis=1, keepdims=True)
+        test_loss = -np.mean(np.log(test_probs[np.arange(len(test_target)), test_target]))
+        test_accuracy = np.mean(np.argmax(test_probs, axis=1) == test_target)
 
         print("After epoch {}: train loss {:.4f} acc {:.1f}%, test loss {:.4f} acc {:.1f}%".format(
             epoch + 1, train_loss, 100 * train_accuracy, test_loss, 100 * test_accuracy))
@@ -80,3 +111,6 @@ if __name__ == "__main__":
     weights, metrics = main(main_args)
     print("Learned weights:",
           *(" ".join([" "] + ["{:.2f}".format(w) for w in row[:10]] + ["..."]) for row in weights.T), sep="\n")
+
+# e45adcd4-55ef-41de-ac3f-e2cd9863b321
+# b5121daf-294b-4cbe-9d6c-23ba00ffecf8
