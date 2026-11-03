@@ -141,7 +141,7 @@ def train_mlp(data: np.ndarray, target: np.ndarray, seed: int, args: argparse.Na
 def ensemble_probabilities(ensemble: list, data: np.ndarray) -> np.ndarray:
     features = deskew(data)
     return np.mean([mlp.predict_proba(features) for mlp in ensemble], axis=0) 
-"""At prediction time, the 5 networks’ class probabilities are averaged and the most likely class is picked. Different seeds make different mistakes, so averaging smooths out individual errors."""
+"""At prediction time, the 5 networks class probabilities are averaged and the most likely class is picked. Different seeds make different mistakes, so averaging smooths out individual errors."""
 
 
 def main(args: argparse.Namespace) -> Optional[npt.ArrayLike]:
